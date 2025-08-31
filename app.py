@@ -188,52 +188,61 @@ def home():
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
+        try:
+            username = request.form['username']
+            email = request.form['email']
+            password = request.form['password']
+            confirm_password = request.form['confirm_password']
 
-        if not all([username, email, password, confirm_password]):
-            flash('Please fill in all fields', 'error')
+            if not all([username, email, password, confirm_password]):
+                flash('Please fill in all fields', 'error')
+                return redirect(url_for('signup'))
+
+            if password != confirm_password:
+                flash('Passwords do not match', 'error')
+                return redirect(url_for('signup'))
+
+            if db.session.query(User).filter_by(username=username).first():
+                flash('Username already exists', 'error')
+                return redirect(url_for('signup'))
+
+            if db.session.query(User).filter_by(email=email).first():
+                flash('Email already exists', 'error')
+                return redirect(url_for('signup'))
+
+            user = User(
+                username=username,
+                email=email,
+                password_hash=generate_password_hash(password)
+            )
+            db.session.add(user)
+            db.session.commit()
+
+            flash('Account created successfully! Please login.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            print(f"Error in signup: {str(e)}")
+            flash('An error occurred. Please try again.', 'error')
             return redirect(url_for('signup'))
-
-        if password != confirm_password:
-            flash('Passwords do not match', 'error')
-            return redirect(url_for('signup'))
-
-        if db.session.query(User).filter_by(username=username).first():
-            flash('Username already exists', 'error')
-            return redirect(url_for('signup'))
-
-        if db.session.query(User).filter_by(email=email).first():
-            flash('Email already exists', 'error')
-            return redirect(url_for('signup'))
-
-        user = User(
-            username=username,
-            email=email,
-            password_hash=generate_password_hash(password)
-        )
-        db.session.add(user)
-        db.session.commit()
-
-        flash('Account created successfully! Please login.', 'success')
-        return redirect(url_for('login'))
 
     return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        try:
+            username = request.form['username']
+            password = request.form['password']
 
-        user = db.session.query(User).filter_by(username=username).first()
-        if user and check_password_hash(user.password_hash, password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid username or password', 'error')
+            user = db.session.query(User).filter_by(username=username).first()
+            if user and check_password_hash(user.password_hash, password):
+                login_user(user)
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid username or password', 'error')
+        except Exception as e:
+            print(f"Error in login: {str(e)}")
+            flash('An error occurred. Please try again.', 'error')
 
     return render_template('login.html')
 
@@ -582,7 +591,20 @@ def download_pdf():
         mimetype='application/pdf'
     )
 
+# Error handlers
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('error.html', error="Internal Server Error"), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('error.html', error="Page Not Found"), 404
+
+# Ensure database is created
+with app.app_context():
+    db.create_all()
+    print("Database initialized successfully!")
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
