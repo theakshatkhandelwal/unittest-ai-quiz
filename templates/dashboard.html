@@ -59,11 +59,11 @@
             <div class="card h-100 text-center">
                 <div class="card-body p-4">
                     <i class="fas fa-brain fa-3x text-warning mb-3"></i>
-                    <h5 class="card-title fw-bold">AI Features</h5>
-                    <p class="card-text">Experience intelligent question generation and smart answer evaluation.</p>
-                    <a href="{{ url_for('quiz') }}" class="btn btn-warning text-white">
-                        <i class="fas fa-magic me-2"></i>Explore AI
-                    </a>
+                    <h5 class="card-title fw-bold">AI Learning</h5>
+                    <p class="card-text">Learn any topic with AI-powered explanations and interactive content.</p>
+                    <button type="button" class="btn btn-warning text-white" data-bs-toggle="modal" data-bs-target="#aiLearningModal">
+                        <i class="fas fa-graduation-cap me-2"></i>Start Learning
+                    </button>
                 </div>
             </div>
         </div>
@@ -195,4 +195,154 @@
         </div>
     </div>
 </div>
+
+<!-- AI Learning Modal -->
+<div class="modal fade" id="aiLearningModal" tabindex="-1" aria-labelledby="aiLearningModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="aiLearningModalLabel">
+                    <i class="fas fa-graduation-cap me-2"></i>AI-Powered Learning
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="aiLearningForm">
+                    <div class="mb-3">
+                        <label for="learningTopic" class="form-label fw-bold">
+                            <i class="fas fa-book me-2"></i>What would you like to learn?
+                        </label>
+                        <input type="text" class="form-control form-control-lg" id="learningTopic" 
+                               placeholder="e.g., Quantum Physics, Machine Learning, Ancient History..." required>
+                        <div class="form-text">
+                            <i class="fas fa-lightbulb me-1"></i>Enter any topic and AI will create a personalized learning experience
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="learningLevel" class="form-label fw-bold">
+                            <i class="fas fa-chart-line me-2"></i>Your Current Level
+                        </label>
+                        <select class="form-select" id="learningLevel">
+                            <option value="beginner">Beginner - New to the topic</option>
+                            <option value="intermediate" selected>Intermediate - Some knowledge</option>
+                            <option value="advanced">Advanced - Deep understanding</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="learningStyle" class="form-label fw-bold">
+                            <i class="fas fa-user-graduate me-2"></i>Preferred Learning Style
+                        </label>
+                        <select class="form-select" id="learningStyle">
+                            <option value="practical">Practical - Hands-on examples</option>
+                            <option value="theoretical" selected>Theoretical - Concepts and principles</option>
+                            <option value="visual">Visual - Diagrams and charts</option>
+                            <option value="interactive">Interactive - Questions and discussions</option>
+                        </select>
+                    </div>
+                </form>
+                
+                <div id="learningContent" style="display: none;">
+                    <hr>
+                    <div class="text-center mb-3">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">AI is creating your personalized learning content...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="startLearningBtn">
+                    <i class="fas fa-rocket me-2"></i>Start Learning
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const startLearningBtn = document.getElementById('startLearningBtn');
+    const learningContent = document.getElementById('learningContent');
+    const aiLearningForm = document.getElementById('aiLearningForm');
+    
+    startLearningBtn.addEventListener('click', function() {
+        const topic = document.getElementById('learningTopic').value.trim();
+        const level = document.getElementById('learningLevel').value;
+        const style = document.getElementById('learningStyle').value;
+        
+        if (!topic) {
+            alert('Please enter a topic to learn about.');
+            return;
+        }
+        
+        // Show loading content
+        learningContent.style.display = 'block';
+        startLearningBtn.disabled = true;
+        startLearningBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+        
+        // Send request to AI learning endpoint
+        fetch('/ai_learn', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                topic: topic,
+                level: level,
+                style: style
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                learningContent.innerHTML = `
+                    <hr>
+                    <div class="learning-result">
+                        <h5 class="text-success mb-3">
+                            <i class="fas fa-check-circle me-2"></i>Your Learning Path: ${topic}
+                        </h5>
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="fw-bold">AI-Generated Content:</h6>
+                                <div class="mb-3">
+                                    ${data.content.replace(/\n/g, '<br>')}
+                                </div>
+                                <div class="text-center">
+                                    <a href="/quiz?topic=${encodeURIComponent(topic)}" class="btn btn-primary">
+                                        <i class="fas fa-question-circle me-2"></i>Take Quiz on This Topic
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                learningContent.innerHTML = `
+                    <hr>
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            learningContent.innerHTML = `
+                <hr>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Error generating learning content. Please try again.
+                </div>
+            `;
+        })
+        .finally(() => {
+            startLearningBtn.disabled = false;
+            startLearningBtn.innerHTML = '<i class="fas fa-rocket me-2"></i>Start Learning';
+        });
+    });
+});
+</script>
 {% endblock %}

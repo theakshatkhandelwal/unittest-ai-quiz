@@ -25,8 +25,16 @@
                 </div>
             </div>
 
+            <!-- Download PDF Button -->
+            <div class="text-center mb-4">
+                <a href="{{ url_for('download_pdf') }}" class="btn btn-success btn-lg">
+                    <i class="fas fa-file-pdf me-2"></i>Download Quiz as PDF
+                </a>
+            </div>
+
             <form method="POST" action="{{ url_for('submit_quiz') }}">
                 {% for question in quiz_data.questions %}
+                    {% set question_index = loop.index0 %}
                     <div class="card mb-4">
                         <div class="card-header bg-light">
                             <h5 class="mb-0">
@@ -42,10 +50,10 @@
                                     {% for option in question.options %}
                                         <div class="form-check mb-2">
                                             <input class="form-check-input" type="radio" 
-                                                   name="answers[]" 
-                                                   id="q{{ loop.parent.index }}_{{ loop.index }}" 
+                                                   name="question_{{ question_index }}" 
+                                                   id="q{{ question_index }}_{{ loop.index }}" 
                                                    value="{{ option }}" required>
-                                            <label class="form-check-label" for="q{{ loop.parent.index }}_{{ loop.index }}">
+                                            <label class="form-check-label" for="q{{ question_index }}_{{ loop.index }}">
                                                 {{ option }}
                                             </label>
                                         </div>
@@ -54,13 +62,13 @@
                             {% else %}
                                 <!-- Subjective Answer -->
                                 <div class="mb-3">
-                                    <label for="answer_{{ loop.index }}" class="form-label fw-bold">
+                                    <label for="answer_{{ question_index }}" class="form-label fw-bold">
                                         Your Answer:
                                         <span class="badge bg-success ms-2">{{ question.marks }} marks</span>
                                     </label>
                                     <textarea class="form-control" 
-                                              id="answer_{{ loop.index }}" 
-                                              name="answers[]" 
+                                              id="answer_{{ question_index }}" 
+                                              name="subjective_answers[{{ question_index }}]" 
                                               rows="6" 
                                               placeholder="Write your detailed answer here..." 
                                               required></textarea>

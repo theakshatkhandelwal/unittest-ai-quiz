@@ -69,6 +69,34 @@
             border-color: var(--primary-color);
             box-shadow: 0 0 0 0.2rem rgba(66, 133, 244, 0.25);
         }
+        
+        .bg-gradient {
+            background: linear-gradient(135deg, var(--gradient-bg), var(--gradient-fg)) !important;
+        }
+        
+        .text-white {
+            color: white !important;
+        }
+        
+        .card.bg-gradient {
+            color: white !important;
+        }
+        
+        .card.bg-gradient h2,
+        .card.bg-gradient p {
+            color: white !important;
+        }
+        
+        .btn-light {
+            background-color: white !important;
+            color: var(--gradient-bg) !important;
+            border-color: white !important;
+        }
+        
+        .btn-light:hover {
+            background-color: #f8f9fa !important;
+            color: var(--gradient-bg) !important;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

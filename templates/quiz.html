@@ -13,16 +13,34 @@
                     </h3>
                 </div>
                 <div class="card-body p-4">
-                    <form method="POST">
-                        <!-- Topic Selection -->
+                    <form method="POST" enctype="multipart/form-data">
+                        <!-- Topic and File Selection -->
                         <div class="mb-4">
-                            <label for="topic" class="form-label fw-bold fs-5">
-                                <i class="fas fa-book me-2"></i>Choose Your Topic
-                            </label>
-                            <input type="text" class="form-control form-control-lg" id="topic" name="topic" 
-                                   placeholder="e.g., Artificial Intelligence, Physics, History, Mathematics..." required>
-                            <div class="form-text">
-                                <i class="fas fa-lightbulb me-1"></i>Enter any subject or topic you want to learn about
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <label for="topic" class="form-label fw-bold fs-5">
+                                        <i class="fas fa-book me-2"></i>Choose Your Topic
+                                    </label>
+                                                                                                    <input type="text" class="form-control" id="topic" name="topic" 
+                                           placeholder="e.g., AI, Physics, History..." 
+                                           value="{{ prefill_topic or '' }}">
+                                    <div class="form-text">
+                                        <i class="fas fa-lightbulb me-1"></i>Enter any subject or topic you want to learn about
+                                    </div>
+                                    <div class="form-text text-muted">
+                                        <i class="fas fa-info-circle me-1"></i><strong>OR</strong> upload a PDF below
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="file_upload" class="form-label fw-bold fs-5">
+                                        <i class="fas fa-file-upload me-2"></i>Upload PDF File
+                                    </label>
+                                    <input type="file" class="form-control" id="file_upload" name="file_upload" 
+                                           accept=".pdf" onchange="handleFileUpload(this)">
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>Upload PDF to extract topic automatically
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -117,10 +135,15 @@
 
                         <!-- Submit Button -->
                         <div class="text-center">
-                            <button type="submit" class="btn btn-primary btn-lg px-5">
+                            <button type="submit" class="btn btn-primary btn-lg px-5" id="submitBtn">
                                 <i class="fas fa-magic me-2"></i>Generate AI Quiz
                             </button>
                         </div>
+                    </form>
+                    
+                    <!-- Hidden form for file uploads -->
+                    <form id="fileUploadForm" method="POST" enctype="multipart/form-data" style="display: none;">
+                        <input type="hidden" name="file_upload" id="hiddenFileUpload">
                     </form>
                 </div>
             </div>
@@ -198,8 +221,88 @@ document.addEventListener('DOMContentLoaded', function() {
         radio.addEventListener('change', toggleQuestionCounts);
     });
 
-    // Initialize on page load
+        // Initialize on page load
     toggleQuestionCounts();
+    
+    // Form validation - ensure either topic OR PDF is provided
+    const form = document.querySelector('form');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    form.addEventListener('submit', function(e) {
+        const topic = document.getElementById('topic').value.trim();
+        const fileUpload = document.getElementById('file_upload').files[0];
+        
+        if (!topic && !fileUpload) {
+            e.preventDefault();
+            showAlert('danger', 'Please either enter a topic OR upload a PDF file.');
+            return false;
+        }
+        
+        // If both are provided, prioritize PDF
+        if (topic && fileUpload) {
+            document.getElementById('topic').value = '';
+            showAlert('info', 'PDF uploaded - topic field cleared. Using PDF content.');
+        }
+    });
 });
+
+// File upload handling
+function handleFileUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const formData = new FormData();
+        formData.append('file_upload', file);
+        
+        // Show loading state
+        const submitBtn = document.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing PDF...';
+        submitBtn.disabled = true;
+        
+        // Upload file to extract topic
+        fetch('/upload_pdf', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('topic').value = data.topic;
+                // Show success message
+                showAlert('success', `Topic extracted from PDF: ${data.topic}`);
+            } else {
+                showAlert('danger', 'Failed to extract topic from PDF. Please enter manually.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'Error processing PDF. Please try again.');
+        })
+        .finally(() => {
+            // Reset button
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    }
+}
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const form = document.querySelector('form');
+    form.parentNode.insertBefore(alertDiv, form);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
 </script>
 {% endblock %}

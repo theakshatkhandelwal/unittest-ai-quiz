@@ -57,7 +57,7 @@ class Progress(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 def evaluate_subjective_answer(question, student_answer, model_answer):
     """Use AI to evaluate subjective answers"""
@@ -201,11 +201,11 @@ def signup():
             flash('Passwords do not match', 'error')
             return redirect(url_for('signup'))
 
-        if User.query.filter_by(username=username).first():
+        if db.session.query(User).filter_by(username=username).first():
             flash('Username already exists', 'error')
             return redirect(url_for('signup'))
 
-        if User.query.filter_by(email=email).first():
+        if db.session.query(User).filter_by(email=email).first():
             flash('Email already exists', 'error')
             return redirect(url_for('signup'))
 
@@ -228,7 +228,7 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        user = User.query.filter_by(username=username).first()
+        user = db.session.query(User).filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             return redirect(url_for('dashboard'))
@@ -246,24 +246,61 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    progress_records = Progress.query.filter_by(user_id=current_user.id).all()
+    progress_records = db.session.query(Progress).filter_by(user_id=current_user.id).all()
     return render_template('dashboard.html', progress_records=progress_records)
 
 @app.route('/quiz', methods=['GET', 'POST'])
 @login_required
 def quiz():
+    if request.method == 'GET':
+        # Handle topic parameter from AI learning modal
+        topic = request.args.get('topic', '')
+        if topic:
+            return render_template('quiz.html', prefill_topic=topic)
+    
     if request.method == 'POST':
         topic = request.form.get('topic', '').strip()
         question_type = request.form.get('question_type', 'mcq')
         mcq_count = int(request.form.get('mcq_count', 3))
         subj_count = int(request.form.get('subj_count', 2))
-
+        
+        # Check if PDF file was uploaded
+        if 'file_upload' in request.files and request.files['file_upload'].filename:
+            file = request.files['file_upload']
+            if file and file.filename.lower().endswith('.pdf'):
+                try:
+                    # Save file temporarily
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                        file.save(tmp_file.name)
+                        tmp_path = tmp_file.name
+                    
+                    # Process the PDF to extract topic
+                    extracted_topic = process_document(tmp_path)
+                    
+                    # Clean up temporary file
+                    os.unlink(tmp_path)
+                    
+                    if extracted_topic:
+                        topic = extracted_topic
+                        flash(f'Topic extracted from PDF: {topic}', 'success')
+                    else:
+                        flash('Could not extract topic from PDF. Please enter a topic manually.', 'error')
+                        return redirect(url_for('quiz'))
+                        
+                except Exception as e:
+                    flash(f'Error processing PDF: {str(e)}', 'error')
+                    return redirect(url_for('quiz'))
+        
+        # Ensure we have a topic
         if not topic:
-            flash('Please enter a topic', 'error')
+            flash('Please either enter a topic OR upload a PDF file.', 'error')
             return redirect(url_for('quiz'))
 
         # Get user's current bloom level for this topic
-        progress = Progress.query.filter_by(user_id=current_user.id, topic=topic).first()
+        progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
         bloom_level = progress.bloom_level if progress else 1
 
         # Generate questions
@@ -310,10 +347,20 @@ def submit_quiz():
     topic = quiz_data['topic']
     bloom_level = quiz_data['bloom_level']
     
-    user_answers = request.form.getlist('answers[]')
-    
-    if len(user_answers) != len(questions):
-        return jsonify({'error': 'Please answer all questions'})
+    # Get answers for each question
+    user_answers = []
+    for i in range(len(questions)):
+        question = questions[i]
+        if question.get('type') == 'mcq':
+            # For MCQ questions, get from question group
+            answer = request.form.get(f'question_{i}')
+        else:
+            # For subjective questions, get from subjective_answers array
+            answer = request.form.get(f'subjective_answers[{i}]')
+        
+        if not answer:
+            return jsonify({'error': f'Please answer question {i+1}'})
+        user_answers.append(answer)
 
     # Calculate scores
     correct_answers = 0
@@ -369,7 +416,7 @@ def submit_quiz():
         final_score = f"{correct_answers}/{len(questions)}"
 
     # Update progress
-    progress = Progress.query.filter_by(user_id=current_user.id, topic=topic).first()
+    progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
     if progress:
         if passed and bloom_level + 1 > progress.bloom_level:
             progress.bloom_level = bloom_level + 1
@@ -393,6 +440,80 @@ def submit_quiz():
                          passed=passed,
                          topic=topic,
                          bloom_level=bloom_level)
+
+@app.route('/upload_pdf', methods=['POST'])
+@login_required
+def upload_pdf():
+    """Handle PDF upload and extract topic"""
+    if 'file_upload' not in request.files:
+        return jsonify({'success': False, 'error': 'No file uploaded'})
+    
+    file = request.files['file_upload']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'})
+    
+    if file and file.filename.lower().endswith('.pdf'):
+        try:
+            # Save file temporarily
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                file.save(tmp_file.name)
+                tmp_path = tmp_file.name
+            
+            # Process the PDF to extract topic
+            topic = process_document(tmp_path)
+            
+            # Clean up temporary file
+            os.unlink(tmp_path)
+            
+            if topic:
+                return jsonify({'success': True, 'topic': topic})
+            else:
+                return jsonify({'success': False, 'error': 'Could not extract topic from PDF'})
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Error processing PDF: {str(e)}'})
+    
+    return jsonify({'success': False, 'error': 'Invalid file format. Please upload a PDF.'})
+
+@app.route('/ai_learn', methods=['POST'])
+@login_required
+def ai_learn():
+    """AI-powered learning content generation"""
+    try:
+        data = request.get_json()
+        topic = data.get('topic', '').strip()
+        level = data.get('level', 'intermediate')
+        style = data.get('style', 'theoretical')
+        
+        if not topic:
+            return jsonify({'success': False, 'error': 'Topic is required'})
+        
+        # Generate learning content using AI
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        prompt = f"""
+        Create a personalized learning path for {topic} at {level} level, 
+        focusing on {style} learning style.
+        
+        Provide:
+        1. A brief overview of the topic
+        2. Key concepts to understand
+        3. Learning objectives
+        4. Suggested study approach
+        5. Common misconceptions to avoid
+        
+        Keep it concise but comprehensive. Format with clear sections.
+        """
+        
+        response = model.generate_content(prompt)
+        content = response.text.strip()
+        
+        return jsonify({'success': True, 'content': content})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error generating learning content: {str(e)}'})
 
 @app.route('/download_pdf')
 @login_required
