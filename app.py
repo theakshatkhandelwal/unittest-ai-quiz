@@ -29,7 +29,14 @@ except LookupError:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///unittest.db')
+# Database configuration - use PostgreSQL on Render, SQLite locally
+database_url = os.environ.get('DATABASE_URL')
+if database_url and database_url.startswith('postgres://'):
+    # Fix for Render's PostgreSQL URL format
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///unittest.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -603,8 +610,13 @@ def not_found_error(error):
 
 # Ensure database is created
 with app.app_context():
-    db.create_all()
-    print("Database initialized successfully!")
+    try:
+        db.create_all()
+        print("Database initialized successfully!")
+        print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+    except Exception as e:
+        print(f"Database initialization error: {str(e)}")
+        # Continue running the app even if database fails
 
 if __name__ == '__main__':
     app.run(debug=True)
