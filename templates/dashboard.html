@@ -102,7 +102,7 @@
                                             
                                             <!-- Progress Bar -->
                                             <div class="mt-3">
-                                                <div class="progress" style="height: 8px;">
+                                                <div class="progress mb-2" style="height: 8px;">
                                                     {% set percentage = (progress.bloom_level / 6) * 100 %}
                                                     <div class="progress-bar bg-success" role="progressbar" 
                                                          style="width: {{ percentage }}%" 
@@ -112,6 +112,16 @@
                                                     </div>
                                                 </div>
                                                 <small class="text-muted">{{ progress.bloom_level }}/6 Bloom's Levels</small>
+                                            </div>
+                                            
+                                            <!-- Continue Learning Button -->
+                                            <div class="mt-3">
+                                                <form method="POST" action="{{ url_for('continue_learning') }}" style="display: inline;">
+                                                    <input type="hidden" name="topic" value="{{ progress.topic }}">
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                                                        <i class="fas fa-play me-2"></i>Continue Learning
+                                                    </button>
+                                                </form>
                                             </div>
                                         </div>
                                     </div>
@@ -263,7 +273,124 @@
     </div>
 </div>
 
+<style>
+.learning-section {
+    border-left: 3px solid #007bff;
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+
+.learning-section h6 {
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 5px;
+}
+
+.learning-section .mb-1 {
+    background-color: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 5px;
+    margin-bottom: 8px;
+    border-left: 3px solid #28a745;
+}
+
+.learning-section .mb-2 {
+    line-height: 1.6;
+    color: #495057;
+}
+</style>
+
 <script>
+// Function to format AI learning content
+function formatLearningContent(content) {
+    // Clean up the content first
+    let cleanContent = content.trim();
+    
+    // Remove any introductory text before the first ##
+    const firstSectionIndex = cleanContent.indexOf('## ');
+    if (firstSectionIndex > 0) {
+        cleanContent = cleanContent.substring(firstSectionIndex);
+    }
+    
+    // Split content into sections
+    const sections = cleanContent.split('## ');
+    let formattedHTML = '';
+    
+    sections.forEach(section => {
+        if (section.trim()) {
+            const lines = section.split('\n').filter(line => line.trim());
+            const sectionTitle = lines[0].trim();
+            const sectionContent = lines.slice(1);
+            
+            if (sectionTitle && sectionContent.length > 0) {
+                let sectionHTML = '';
+                
+                // Add section title with appropriate styling
+                sectionHTML += `<h6 class="fw-bold text-primary mb-2 mt-3">
+                    <i class="fas fa-${getSectionIcon(sectionTitle)} me-2"></i>${sectionTitle}
+                </h6>`;
+                
+                // Format section content
+                sectionContent.forEach(line => {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine) {
+                        if (trimmedLine.startsWith('•') || trimmedLine.startsWith('✓') || trimmedLine.startsWith('⚠️')) {
+                            sectionHTML += `<div class="mb-1 ms-3">${trimmedLine}</div>`;
+                        } else if (trimmedLine.startsWith('*') || trimmedLine.startsWith('-')) {
+                            // Handle other bullet point formats
+                            sectionHTML += `<div class="mb-1 ms-3">• ${trimmedLine.substring(1).trim()}</div>`;
+                        } else if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+                            // Handle bold headers within sections
+                            sectionHTML += `<div class="mb-2 fw-bold">${trimmedLine.replace(/\*\*/g, '')}</div>`;
+                        } else {
+                            sectionHTML += `<div class="mb-2">${trimmedLine}</div>`;
+                        }
+                    }
+                });
+                
+                formattedHTML += `<div class="learning-section">${sectionHTML}</div>`;
+            }
+        }
+    });
+    
+    // If no sections were found, try to format as a simple structured content
+    if (!formattedHTML) {
+        const lines = content.split('\n').filter(line => line.trim());
+        let fallbackHTML = '';
+        
+        lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (trimmedLine) {
+                if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+                    // Bold headers
+                    fallbackHTML += `<h6 class="fw-bold text-primary mb-2 mt-3">${trimmedLine.replace(/\*\*/g, '')}</h6>`;
+                } else if (trimmedLine.startsWith('*') || trimmedLine.startsWith('-')) {
+                    // Bullet points
+                    fallbackHTML += `<div class="mb-1 ms-3">• ${trimmedLine.substring(1).trim()}</div>`;
+                } else {
+                    // Regular text
+                    fallbackHTML += `<div class="mb-2">${trimmedLine}</div>`;
+                }
+            }
+        });
+        
+        formattedHTML = `<div class="learning-section">${fallbackHTML}</div>`;
+    }
+    
+    return formattedHTML || `<div class="mb-3">${content.replace(/\n/g, '<br>')}</div>`;
+}
+
+// Function to get appropriate icon for each section
+function getSectionIcon(sectionTitle) {
+    const title = sectionTitle.toLowerCase();
+    if (title.includes('overview')) return 'info-circle';
+    if (title.includes('concept')) return 'lightbulb';
+    if (title.includes('objective')) return 'target';
+    if (title.includes('approach') || title.includes('study')) return 'route';
+    if (title.includes('misconception')) return 'exclamation-triangle';
+    if (title.includes('step')) return 'arrow-right';
+    return 'book';
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const startLearningBtn = document.getElementById('startLearningBtn');
     const learningContent = document.getElementById('learningContent');
@@ -299,6 +426,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                // Parse and format the AI content
+                const formattedContent = formatLearningContent(data.content);
+                
                 learningContent.innerHTML = `
                     <hr>
                     <div class="learning-result">
@@ -307,11 +437,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         </h5>
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="fw-bold">AI-Generated Content:</h6>
-                                <div class="mb-3">
-                                    ${data.content.replace(/\n/g, '<br>')}
-                                </div>
-                                <div class="text-center">
+                                ${formattedContent}
+                                <div class="text-center mt-4">
                                     <a href="/quiz?topic=${encodeURIComponent(topic)}" class="btn btn-primary">
                                         <i class="fas fa-question-circle me-2"></i>Take Quiz on This Topic
                                     </a>

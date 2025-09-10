@@ -77,6 +77,45 @@
                             </div>
                         </div>
 
+                        <!-- Difficulty Level Selection -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold fs-5">
+                                <i class="fas fa-layer-group me-2"></i>Difficulty Level
+                            </label>
+                            <div class="row">
+                                <div class="col-md-4 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="difficulty_level" id="beginner" value="beginner" 
+                                               {% if not prefill_difficulty or prefill_difficulty == 'beginner' %}checked{% endif %}>
+                                        <label class="form-check-label" for="beginner">
+                                            <i class="fas fa-seedling me-2 text-success"></i>BEGINNER
+                                            <small class="d-block text-muted">Basic facts & definitions</small>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="difficulty_level" id="intermediate" value="intermediate"
+                                               {% if prefill_difficulty == 'intermediate' %}checked{% endif %}>
+                                        <label class="form-check-label" for="intermediate">
+                                            <i class="fas fa-cogs me-2 text-warning"></i>INTERMEDIATE
+                                            <small class="d-block text-muted">Application & analysis</small>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="difficulty_level" id="difficult" value="difficult"
+                                               {% if prefill_difficulty == 'difficult' %}checked{% endif %}>
+                                        <label class="form-check-label" for="difficult">
+                                            <i class="fas fa-brain me-2 text-danger"></i>DIFFICULT
+                                            <small class="d-block text-muted">Critical thinking & synthesis</small>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Question Counts -->
                         <div class="mb-4">
                             <div class="row">
@@ -127,7 +166,8 @@
                             </h6>
                             <ul class="mb-0">
                                 <li><strong>Smart Question Generation:</strong> AI creates context-aware questions based on your topic</li>
-                                <li><strong>Bloom's Taxonomy:</strong> Questions automatically adjust to your current learning level</li>
+                                <li><strong>Difficulty Levels:</strong> Choose from Beginner, Intermediate, or Difficult levels</li>
+                                <li><strong>Question Variety:</strong> Each quiz generates unique questions to avoid repetition</li>
                                 <li><strong>Intelligent Assessment:</strong> AI evaluates subjective answers with detailed feedback</li>
                                 <li><strong>Adaptive Learning:</strong> Progress tracking helps you advance through cognitive levels</li>
                             </ul>

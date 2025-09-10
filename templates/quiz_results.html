@@ -12,7 +12,7 @@
                     <h2 class="mb-2">
                         <i class="fas fa-trophy me-2"></i>Quiz Results
                     </h2>
-                    <h4 class="mb-0">{{ topic }} - Level {{ bloom_level }}</h4>
+                    <h4 class="mb-0">{{ topic }} - {{ difficulty_level.title() if difficulty_level else 'Beginner' }} Level</h4>
                 </div>
             </div>
 
@@ -133,13 +133,21 @@
                 </a>
                 
                 {% if passed %}
-                    <a href="{{ url_for('quiz') }}" class="btn btn-success btn-lg me-3">
-                        <i class="fas fa-arrow-up me-2"></i>Try Next Level
-                    </a>
+                    <form method="POST" action="{{ url_for('next_level') }}" style="display: inline;">
+                        <input type="hidden" name="topic" value="{{ topic }}">
+                        <input type="hidden" name="difficulty_level" value="{{ difficulty_level or 'beginner' }}">
+                        <button type="submit" class="btn btn-success btn-lg me-3">
+                            <i class="fas fa-arrow-up me-2"></i>Try Next Level
+                        </button>
+                    </form>
                 {% else %}
-                    <a href="{{ url_for('quiz') }}" class="btn btn-warning btn-lg me-3">
-                        <i class="fas fa-redo me-2"></i>Retry Level
-                    </a>
+                    <form method="POST" action="{{ url_for('retry_level') }}" style="display: inline;">
+                        <input type="hidden" name="topic" value="{{ topic }}">
+                        <input type="hidden" name="difficulty_level" value="{{ difficulty_level or 'beginner' }}">
+                        <button type="submit" class="btn btn-warning btn-lg me-3">
+                            <i class="fas fa-redo me-2"></i>Retry Level
+                        </button>
+                    </form>
                 {% endif %}
                 
                 <a href="{{ url_for('quiz') }}" class="btn btn-outline-primary btn-lg">

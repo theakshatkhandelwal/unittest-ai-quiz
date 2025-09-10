@@ -103,18 +103,53 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
         print(f"Error in evaluate_subjective_answer: {str(e)}")
         return 0.5  # Default on error
 
-def generate_quiz(topic, bloom_level, question_type="mcq", num_questions=5):
+def get_difficulty_from_bloom_level(bloom_level):
+    """Map Bloom's taxonomy level to difficulty level"""
+    if bloom_level <= 2:
+        return "beginner"
+    elif bloom_level <= 4:
+        return "intermediate"
+    else:
+        return "difficult"
+
+def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5):
     if not genai:
         return None
 
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
+        
+        # Map difficulty levels to Bloom's taxonomy levels and descriptions
+        difficulty_mapping = {
+            "beginner": {
+                "bloom_level": 1,
+                "description": "Remembering and Understanding level - basic facts, definitions, and simple concepts"
+            },
+            "intermediate": {
+                "bloom_level": 3,
+                "description": "Applying and Analyzing level - practical application and analysis of concepts"
+            },
+            "difficult": {
+                "bloom_level": 5,
+                "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"
+            }
+        }
+        
+        difficulty_info = difficulty_mapping.get(difficulty_level, difficulty_mapping["beginner"])
+        bloom_level = difficulty_info["bloom_level"]
+        level_description = difficulty_info["description"]
+        
+        # Add randomization seed to prompt for variety
+        import random
+        random_seed = random.randint(1000, 9999)
 
         if question_type == "mcq":
             prompt = f"""
-                Generate a multiple-choice quiz on {topic} at Bloom's Taxonomy level {bloom_level}.
+                Generate a multiple-choice quiz on {topic} at {difficulty_level.upper()} level ({level_description}).
                 - Include exactly {num_questions} questions.
                 - Each question should have 4 answer choices.
+                - Make questions diverse and varied - avoid repetitive patterns.
+                - Use randomization seed {random_seed} to ensure variety.
                 - Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.).
                 - Return output in valid JSON format: 
                 [
@@ -124,9 +159,11 @@ def generate_quiz(topic, bloom_level, question_type="mcq", num_questions=5):
             """
         else:  # subjective
             prompt = f"""
-                Generate subjective questions on {topic} at Bloom's Taxonomy level {bloom_level}.
+                Generate subjective questions on {topic} at {difficulty_level.upper()} level ({level_description}).
                 - Include exactly {num_questions} questions.
                 - Questions should be open-ended and require detailed answers.
+                - Make questions diverse and varied - avoid repetitive patterns.
+                - Use randomization seed {random_seed} to ensure variety.
                 - Include a "level" key specifying the Bloom's Taxonomy level.
                 - Vary the marks between 5, 10, 15, and 20 marks for different questions.
                 - Return output in valid JSON format: 
@@ -269,16 +306,23 @@ def dashboard():
 @login_required
 def quiz():
     if request.method == 'GET':
-        # Handle topic parameter from AI learning modal
+        # Handle topic parameter from AI learning modal or next/retry level
         topic = request.args.get('topic', '')
+        difficulty = request.args.get('difficulty', '')
+        action = request.args.get('action', '')
+        
         if topic:
-            return render_template('quiz.html', prefill_topic=topic)
+            return render_template('quiz.html', 
+                                 prefill_topic=topic, 
+                                 prefill_difficulty=difficulty,
+                                 action=action)
     
     if request.method == 'POST':
         topic = request.form.get('topic', '').strip()
         question_type = request.form.get('question_type', 'mcq')
         mcq_count = int(request.form.get('mcq_count', 3))
         subj_count = int(request.form.get('subj_count', 2))
+        difficulty_level = request.form.get('difficulty_level', 'beginner')
         
         # Check if PDF file was uploaded
         if 'file_upload' in request.files and request.files['file_upload'].filename:
@@ -315,26 +359,27 @@ def quiz():
             flash('Please either enter a topic OR upload a PDF file.', 'error')
             return redirect(url_for('quiz'))
 
-        # Get user's current bloom level for this topic
+        # Get user's current bloom level for this topic (for progress tracking)
         progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
         bloom_level = progress.bloom_level if progress else 1
 
-        # Generate questions
+        # Generate questions using difficulty level
         questions = []
         if question_type == "both":
-            mcq_questions = generate_quiz(topic, bloom_level, "mcq", mcq_count)
-            subj_questions = generate_quiz(topic, bloom_level, "subjective", subj_count)
+            mcq_questions = generate_quiz(topic, difficulty_level, "mcq", mcq_count)
+            subj_questions = generate_quiz(topic, difficulty_level, "subjective", subj_count)
             if mcq_questions and subj_questions:
                 questions = mcq_questions + subj_questions
         else:
             num_q = mcq_count if question_type == "mcq" else subj_count
-            questions = generate_quiz(topic, bloom_level, question_type, num_q)
+            questions = generate_quiz(topic, difficulty_level, question_type, num_q)
 
         if questions:
             session['current_quiz'] = {
                 'questions': questions,
                 'topic': topic,
-                'bloom_level': bloom_level
+                'bloom_level': bloom_level,
+                'difficulty_level': difficulty_level
             }
             return redirect(url_for('take_quiz'))
         else:
@@ -362,6 +407,7 @@ def submit_quiz():
     questions = quiz_data['questions']
     topic = quiz_data['topic']
     bloom_level = quiz_data['bloom_level']
+    difficulty_level = quiz_data.get('difficulty_level', 'beginner')
     
     # Get answers for each question
     user_answers = []
@@ -455,7 +501,121 @@ def submit_quiz():
                          percentage=percentage, 
                          passed=passed,
                          topic=topic,
-                         bloom_level=bloom_level)
+                         bloom_level=bloom_level,
+                         difficulty_level=difficulty_level)
+
+@app.route('/next_level', methods=['POST'])
+@login_required
+def next_level():
+    """Automatically generate next level quiz and redirect to take_quiz"""
+    try:
+        topic = request.form.get('topic', '').strip()
+        difficulty_level = request.form.get('difficulty_level', 'beginner').strip()
+        
+        if not topic:
+            flash('Topic is required', 'error')
+            return redirect(url_for('quiz'))
+        
+        # Determine next difficulty level
+        difficulty_mapping = {
+            "beginner": "intermediate",
+            "intermediate": "difficult", 
+            "difficult": "difficult"  # Stay at difficult if already at highest level
+        }
+        next_difficulty = difficulty_mapping.get(difficulty_level, "intermediate")
+        
+        # Generate questions for next level
+        questions = generate_quiz(topic, next_difficulty, "mcq", 5)
+        
+        if questions:
+            session['current_quiz'] = {
+                'questions': questions,
+                'topic': topic,
+                'bloom_level': 1,  # This will be updated based on difficulty
+                'difficulty_level': next_difficulty
+            }
+            flash(f'Generated {next_difficulty.title()} level quiz for {topic}!', 'success')
+            return redirect(url_for('take_quiz'))
+        else:
+            flash('Failed to generate next level quiz', 'error')
+            return redirect(url_for('quiz'))
+    except Exception as e:
+        print(f"Error in next_level: {str(e)}")
+        flash('An error occurred while generating the next level quiz', 'error')
+        return redirect(url_for('quiz'))
+
+@app.route('/retry_level', methods=['POST'])
+@login_required
+def retry_level():
+    """Automatically generate retry quiz and redirect to take_quiz"""
+    try:
+        topic = request.form.get('topic', '').strip()
+        difficulty_level = request.form.get('difficulty_level', 'beginner').strip()
+        
+        if not topic:
+            flash('Topic is required', 'error')
+            return redirect(url_for('quiz'))
+        
+        # Generate questions for the same level
+        questions = generate_quiz(topic, difficulty_level, "mcq", 5)
+        
+        if questions:
+            session['current_quiz'] = {
+                'questions': questions,
+                'topic': topic,
+                'bloom_level': 1,  # This will be updated based on difficulty
+                'difficulty_level': difficulty_level
+            }
+            flash(f'Generated new {difficulty_level.title()} level quiz for {topic}!', 'success')
+            return redirect(url_for('take_quiz'))
+        else:
+            flash('Failed to generate retry quiz', 'error')
+            return redirect(url_for('quiz'))
+    except Exception as e:
+        print(f"Error in retry_level: {str(e)}")
+        flash('An error occurred while generating the retry quiz', 'error')
+        return redirect(url_for('quiz'))
+
+@app.route('/continue_learning', methods=['POST'])
+@login_required
+def continue_learning():
+    """Continue learning from where user left off based on their progress"""
+    try:
+        topic = request.form.get('topic', '').strip()
+        
+        if not topic:
+            flash('Topic is required', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Get user's current progress for this topic
+        progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
+        
+        if not progress:
+            flash('No progress found for this topic', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Map bloom level to difficulty level
+        difficulty_level = get_difficulty_from_bloom_level(progress.bloom_level)
+        
+        # Generate questions for the current level
+        questions = generate_quiz(topic, difficulty_level, "mcq", 5)
+        
+        if questions:
+            session['current_quiz'] = {
+                'questions': questions,
+                'topic': topic,
+                'bloom_level': progress.bloom_level,
+                'difficulty_level': difficulty_level
+            }
+            flash(f'Continuing {topic} at {difficulty_level.title()} level (Bloom Level {progress.bloom_level})!', 'success')
+            return redirect(url_for('take_quiz'))
+        else:
+            flash('Failed to generate quiz for continuing learning', 'error')
+            return redirect(url_for('dashboard'))
+    except Exception as e:
+        print(f"Error in continue_learning: {str(e)}")
+        flash('An error occurred while continuing your learning', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/upload_pdf', methods=['POST'])
 @login_required
@@ -513,14 +673,32 @@ def ai_learn():
         Create a personalized learning path for {topic} at {level} level, 
         focusing on {style} learning style.
         
-        Provide:
-        1. A brief overview of the topic
-        2. Key concepts to understand
-        3. Learning objectives
-        4. Suggested study approach
-        5. Common misconceptions to avoid
+        IMPORTANT: You MUST use this EXACT format with these EXACT section headers:
         
-        Keep it concise but comprehensive. Format with clear sections.
+        ## OVERVIEW
+        [Write a brief 2-3 sentence overview of the topic here]
+        
+        ## KEY CONCEPTS
+        • [Write concept 1 with brief explanation here]
+        • [Write concept 2 with brief explanation here]
+        • [Write concept 3 with brief explanation here]
+        
+        ## LEARNING OBJECTIVES
+        ✓ [Write objective 1 here]
+        ✓ [Write objective 2 here]
+        ✓ [Write objective 3 here]
+        
+        ## STUDY APPROACH
+        [Write practical study recommendations based on {style} learning style here]
+        
+        ## COMMON MISCONCEPTIONS
+        ⚠️ [Write misconception 1 and why it's wrong here]
+        ⚠️ [Write misconception 2 and why it's wrong here]
+        
+        ## NEXT STEPS
+        [Write what to do after understanding these basics here]
+        
+        CRITICAL: Start your response immediately with "## OVERVIEW" and follow the exact format above. Do not add any introductory text or explanations before the sections.
         """
         
         response = model.generate_content(prompt)
@@ -619,4 +797,5 @@ with app.app_context():
         # Continue running the app even if database fails
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)

@@ -14,7 +14,7 @@
                             <h3 class="mb-0">
                                 <i class="fas fa-question-circle me-2"></i>Quiz: {{ quiz_data.topic }}
                             </h3>
-                            <p class="mb-0">Bloom's Taxonomy Level: {{ quiz_data.bloom_level }}</p>
+                            <p class="mb-0">{{ quiz_data.get('difficulty_level', 'beginner').title() }} Level</p>
                         </div>
                         <div class="col-md-4 text-md-end">
                             <a href="{{ url_for('download_pdf') }}" class="btn btn-light btn-sm">
