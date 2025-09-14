@@ -4,6 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}UniTest - AI Learning Platform{% endblock %}</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="{% block description %}UniTest is an AI-powered learning platform that generates personalized quizzes and assessments using Google Gemini AI. Learn any topic with intelligent question generation and Bloom's taxonomy-based progression.{% endblock %}">
+    <meta name="keywords" content="{% block keywords %}AI learning, quiz generator, education technology, personalized learning, Bloom's taxonomy, AI assessment, online education, study platform, learning management system{% endblock %}">
+    <meta name="author" content="Akshat Khandelwal">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{% block og_title %}UniTest - AI-Powered Learning Platform{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Transform your learning experience with personalized AI-generated quizzes and intelligent assessment using Google Gemini AI.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://unittest-ai.vercel.app">
+    <meta property="og:image" content="https://unittest-ai.vercel.app/static/og-image.png">
+    <meta property="og:site_name" content="UniTest">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}UniTest - AI-Powered Learning Platform{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Transform your learning experience with personalized AI-generated quizzes and intelligent assessment.{% endblock %}">
+    <meta name="twitter:image" content="https://unittest-ai.vercel.app/static/og-image.png">
+    
+    <!-- Additional SEO Tags -->
+    <link rel="canonical" href="https://unittest-ai.vercel.app{% block canonical_path %}{{ request.path }}{% endblock %}">
+    <meta name="theme-color" content="#4285f4">
+    <meta name="msapplication-TileColor" content="#4285f4">
+    
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "UniTest",
+        "description": "AI-powered learning platform with personalized quiz generation and intelligent assessment",
+        "url": "https://unittest-ai.vercel.app",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Web Browser",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "creator": {
+            "@type": "Person",
+            "name": "Akshat Khandelwal"
+        },
+        "featureList": [
+            "AI-Generated Questions",
+            "Bloom's Taxonomy Integration",
+            "Personalized Learning Paths",
+            "PDF Document Processing",
+            "Progress Tracking",
+            "Multiple Question Types"
+        ]
+    }
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>

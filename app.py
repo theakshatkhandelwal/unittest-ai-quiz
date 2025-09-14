@@ -29,11 +29,14 @@ except LookupError:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
-# Database configuration - use PostgreSQL on Render, SQLite locally
+# Database configuration - use PostgreSQL on Vercel/NeonDB, SQLite locally
 database_url = os.environ.get('DATABASE_URL')
 if database_url and database_url.startswith('postgres://'):
-    # Fix for Render's PostgreSQL URL format
+    # Fix for Vercel/NeonDB PostgreSQL URL format
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+elif database_url and database_url.startswith('postgresql://'):
+    # Already in correct format for NeonDB
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///unittest.db'
@@ -228,6 +231,14 @@ def process_document(file_path):
 @app.route('/')
 def home():
     return render_template('home.html')
+
+@app.route('/sitemap.xml')
+def sitemap():
+    return send_file('static/sitemap.xml', mimetype='application/xml')
+
+@app.route('/robots.txt')
+def robots():
+    return send_file('static/robots.txt', mimetype='text/plain')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -799,3 +810,4 @@ with app.app_context():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
