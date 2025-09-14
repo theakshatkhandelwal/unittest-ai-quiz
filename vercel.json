@@ -11,10 +11,5 @@
       "src": "/(.*)",
       "dest": "api/index_light.py"
     }
-  ],
-  "functions": {
-    "api/index_light.py": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
