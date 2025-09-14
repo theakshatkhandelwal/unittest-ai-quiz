@@ -7,9 +7,6 @@ import google.generativeai as genai
 import json
 import re
 import PyPDF2
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 from collections import Counter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -19,17 +16,9 @@ from reportlab.lib.units import inch
 import io
 from datetime import datetime
 
-# Download NLTK data only when needed
-def ensure_nltk_data():
-    try:
-        nltk.data.find('tokenizers/punkt')
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('punkt', quiet=True)
-        nltk.download('stopwords', quiet=True)
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
 # Database configuration - use PostgreSQL on Vercel/NeonDB, SQLite locally
 database_url = os.environ.get('DATABASE_URL')
 if database_url and database_url.startswith('postgres://'):
@@ -197,12 +186,9 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
         print(f"Error in generate_quiz: {str(e)}")
         return None
 
-def process_document(file_path):
-    """Process uploaded document to extract content"""
+def process_document_simple(file_path):
+    """Simple document processing without NLTK"""
     try:
-        # Ensure NLTK data is available
-        ensure_nltk_data()
-        
         content = ""
         if file_path.lower().endswith('.pdf'):
             with open(file_path, 'rb') as file:
@@ -216,10 +202,11 @@ def process_document(file_path):
         if not content.strip():
             return None
 
-        tokens = word_tokenize(content.lower())
-        stop_words = set(stopwords.words('english'))
-        meaningful_words = [word for word in tokens if word.isalnum() and word not in stop_words]
-
+        # Simple word extraction without NLTK
+        words = content.lower().split()
+        # Basic filtering
+        meaningful_words = [word for word in words if word.isalnum() and len(word) > 3]
+        
         if not meaningful_words:
             return None
 
@@ -353,7 +340,7 @@ def quiz():
                         tmp_path = tmp_file.name
                     
                     # Process the PDF to extract topic
-                    extracted_topic = process_document(tmp_path)
+                    extracted_topic = process_document_simple(tmp_path)
                     
                     # Clean up temporary file
                     os.unlink(tmp_path)
@@ -519,278 +506,6 @@ def submit_quiz():
                          bloom_level=bloom_level,
                          difficulty_level=difficulty_level)
 
-@app.route('/next_level', methods=['POST'])
-@login_required
-def next_level():
-    """Automatically generate next level quiz and redirect to take_quiz"""
-    try:
-        topic = request.form.get('topic', '').strip()
-        difficulty_level = request.form.get('difficulty_level', 'beginner').strip()
-        
-        if not topic:
-            flash('Topic is required', 'error')
-            return redirect(url_for('quiz'))
-        
-        # Determine next difficulty level
-        difficulty_mapping = {
-            "beginner": "intermediate",
-            "intermediate": "difficult", 
-            "difficult": "difficult"  # Stay at difficult if already at highest level
-        }
-        next_difficulty = difficulty_mapping.get(difficulty_level, "intermediate")
-        
-        # Generate questions for next level
-        questions = generate_quiz(topic, next_difficulty, "mcq", 5)
-        
-        if questions:
-            session['current_quiz'] = {
-                'questions': questions,
-                'topic': topic,
-                'bloom_level': 1,  # This will be updated based on difficulty
-                'difficulty_level': next_difficulty
-            }
-            flash(f'Generated {next_difficulty.title()} level quiz for {topic}!', 'success')
-            return redirect(url_for('take_quiz'))
-        else:
-            flash('Failed to generate next level quiz', 'error')
-            return redirect(url_for('quiz'))
-    except Exception as e:
-        print(f"Error in next_level: {str(e)}")
-        flash('An error occurred while generating the next level quiz', 'error')
-        return redirect(url_for('quiz'))
-
-@app.route('/retry_level', methods=['POST'])
-@login_required
-def retry_level():
-    """Automatically generate retry quiz and redirect to take_quiz"""
-    try:
-        topic = request.form.get('topic', '').strip()
-        difficulty_level = request.form.get('difficulty_level', 'beginner').strip()
-        
-        if not topic:
-            flash('Topic is required', 'error')
-            return redirect(url_for('quiz'))
-        
-        # Generate questions for the same level
-        questions = generate_quiz(topic, difficulty_level, "mcq", 5)
-        
-        if questions:
-            session['current_quiz'] = {
-                'questions': questions,
-                'topic': topic,
-                'bloom_level': 1,  # This will be updated based on difficulty
-                'difficulty_level': difficulty_level
-            }
-            flash(f'Generated new {difficulty_level.title()} level quiz for {topic}!', 'success')
-            return redirect(url_for('take_quiz'))
-        else:
-            flash('Failed to generate retry quiz', 'error')
-            return redirect(url_for('quiz'))
-    except Exception as e:
-        print(f"Error in retry_level: {str(e)}")
-        flash('An error occurred while generating the retry quiz', 'error')
-        return redirect(url_for('quiz'))
-
-@app.route('/continue_learning', methods=['POST'])
-@login_required
-def continue_learning():
-    """Continue learning from where user left off based on their progress"""
-    try:
-        topic = request.form.get('topic', '').strip()
-        
-        if not topic:
-            flash('Topic is required', 'error')
-            return redirect(url_for('dashboard'))
-        
-        # Get user's current progress for this topic
-        progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
-        
-        if not progress:
-            flash('No progress found for this topic', 'error')
-            return redirect(url_for('dashboard'))
-        
-        # Map bloom level to difficulty level
-        difficulty_level = get_difficulty_from_bloom_level(progress.bloom_level)
-        
-        # Generate questions for the current level
-        questions = generate_quiz(topic, difficulty_level, "mcq", 5)
-        
-        if questions:
-            session['current_quiz'] = {
-                'questions': questions,
-                'topic': topic,
-                'bloom_level': progress.bloom_level,
-                'difficulty_level': difficulty_level
-            }
-            flash(f'Continuing {topic} at {difficulty_level.title()} level (Bloom Level {progress.bloom_level})!', 'success')
-            return redirect(url_for('take_quiz'))
-        else:
-            flash('Failed to generate quiz for continuing learning', 'error')
-            return redirect(url_for('dashboard'))
-    except Exception as e:
-        print(f"Error in continue_learning: {str(e)}")
-        flash('An error occurred while continuing your learning', 'error')
-        return redirect(url_for('dashboard'))
-
-@app.route('/upload_pdf', methods=['POST'])
-@login_required
-def upload_pdf():
-    """Handle PDF upload and extract topic"""
-    if 'file_upload' not in request.files:
-        return jsonify({'success': False, 'error': 'No file uploaded'})
-    
-    file = request.files['file_upload']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'})
-    
-    if file and file.filename.lower().endswith('.pdf'):
-        try:
-            # Save file temporarily
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                file.save(tmp_file.name)
-                tmp_path = tmp_file.name
-            
-            # Process the PDF to extract topic
-            topic = process_document(tmp_path)
-            
-            # Clean up temporary file
-            os.unlink(tmp_path)
-            
-            if topic:
-                return jsonify({'success': True, 'topic': topic})
-            else:
-                return jsonify({'success': False, 'error': 'Could not extract topic from PDF'})
-                
-        except Exception as e:
-            return jsonify({'success': False, 'error': f'Error processing PDF: {str(e)}'})
-    
-    return jsonify({'success': False, 'error': 'Invalid file format. Please upload a PDF.'})
-
-@app.route('/ai_learn', methods=['POST'])
-@login_required
-def ai_learn():
-    """AI-powered learning content generation"""
-    try:
-        data = request.get_json()
-        topic = data.get('topic', '').strip()
-        level = data.get('level', 'intermediate')
-        style = data.get('style', 'theoretical')
-        
-        if not topic:
-            return jsonify({'success': False, 'error': 'Topic is required'})
-        
-        # Generate learning content using AI
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        prompt = f"""
-        Create a personalized learning path for {topic} at {level} level, 
-        focusing on {style} learning style.
-        
-        IMPORTANT: You MUST use this EXACT format with these EXACT section headers:
-        
-        ## OVERVIEW
-        [Write a brief 2-3 sentence overview of the topic here]
-        
-        ## KEY CONCEPTS
-        • [Write concept 1 with brief explanation here]
-        • [Write concept 2 with brief explanation here]
-        • [Write concept 3 with brief explanation here]
-        
-        ## LEARNING OBJECTIVES
-        ✓ [Write objective 1 here]
-        ✓ [Write objective 2 here]
-        ✓ [Write objective 3 here]
-        
-        ## STUDY APPROACH
-        [Write practical study recommendations based on {style} learning style here]
-        
-        ## COMMON MISCONCEPTIONS
-        ⚠️ [Write misconception 1 and why it's wrong here]
-        ⚠️ [Write misconception 2 and why it's wrong here]
-        
-        ## NEXT STEPS
-        [Write what to do after understanding these basics here]
-        
-        CRITICAL: Start your response immediately with "## OVERVIEW" and follow the exact format above. Do not add any introductory text or explanations before the sections.
-        """
-        
-        response = model.generate_content(prompt)
-        content = response.text.strip()
-        
-        return jsonify({'success': True, 'content': content})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'Error generating learning content: {str(e)}'})
-
-@app.route('/download_pdf')
-@login_required
-def download_pdf():
-    quiz_data = session.get('current_quiz')
-    if not quiz_data:
-        return jsonify({'error': 'No quiz available'})
-
-    questions = quiz_data['questions']
-    topic = quiz_data['topic']
-    bloom_level = quiz_data['bloom_level']
-
-    # Create PDF in memory
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=30
-    )
-    question_style = ParagraphStyle(
-        'Question',
-        parent=styles['Normal'],
-        fontSize=12,
-        spaceAfter=12,
-        textColor=colors.black
-    )
-    option_style = ParagraphStyle(
-        'Option',
-        parent=styles['Normal'],
-        fontSize=11,
-        leftIndent=20,
-        spaceAfter=6,
-        textColor=colors.black
-    )
-    
-    content = []
-    content.append(Paragraph(f"Quiz: {topic}", title_style))
-    content.append(Paragraph(f"Bloom's Taxonomy Level: {bloom_level}", styles['Heading2']))
-    content.append(Spacer(1, 20))
-    
-    for i, q in enumerate(questions, 1):
-        question_text = f"Q{i}. {q['question']}"
-        content.append(Paragraph(question_text, question_style))
-        
-        if q.get('type') == 'mcq':
-            for opt in q['options']:
-                option_text = f"□ {opt}"
-                content.append(Paragraph(option_text, option_style))
-        else:
-            content.append(Paragraph(f"Marks: {q.get('marks', 10)}", option_style))
-            content.append(Paragraph("Answer: ________________________", option_style))
-        
-        content.append(Spacer(1, 20))
-    
-    doc.build(content)
-    buffer.seek(0)
-    
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=f"Quiz_{topic}_Level{bloom_level}.pdf",
-        mimetype='application/pdf'
-    )
-
 # Error handlers
 @app.errorhandler(500)
 def internal_error(error):
@@ -814,4 +529,3 @@ with app.app_context():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
